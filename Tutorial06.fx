@@ -13,8 +13,8 @@ cbuffer ConstantBuffer : register( b0 )
 	matrix World;
 	matrix View;
 	matrix Projection;
-	float4 vLightDir[2];
-	float4 vLightColor[2];
+	float4 vLightDir[3];
+	float4 vLightColor[3];
 	float4 vOutputColor; //light color
 }
 
@@ -56,7 +56,7 @@ float4 PS( PS_INPUT input) : SV_Target
     float4 finalColor = 0;
     
     //do NdotL lighting for 2 lights
-    for(int i=0; i<2; i++)
+    for(int i=0; i<3; i++)
     {
         finalColor += saturate( dot( (float3)vLightDir[i],input.Norm) * vLightColor[i] );
     }

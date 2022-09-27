@@ -28,8 +28,8 @@ struct ConstantBuffer
 	XMMATRIX mWorld;
 	XMMATRIX mView;
 	XMMATRIX mProjection;
-	XMFLOAT4 vLightDir[2];
-	XMFLOAT4 vLightColor[2];
+	XMFLOAT4 vLightDir[3];
+	XMFLOAT4 vLightColor[3];
 	XMFLOAT4 vOutputColor;
 };
 
@@ -458,7 +458,7 @@ HRESULT InitDevice()
 	g_World = XMMatrixIdentity();
 
     // Initialize the view matrix
-	XMVECTOR Eye = XMVectorSet( 0.0f, 4.0f, -10.0f, 0.0f );
+	XMVECTOR Eye = XMVectorSet( 0.0f, 4.0f, -15.0f, 0.0f );
 	XMVECTOR At = XMVectorSet( 0.0f, 1.0f, 0.0f, 0.0f );
 	XMVECTOR Up = XMVectorSet( 0.0f, 1.0f, 0.0f, 0.0f );
 	g_View = XMMatrixLookAtLH( Eye, At, Up );
@@ -544,22 +544,32 @@ void Render()
 	g_World = XMMatrixRotationY( t );
 
     // Setup our lighting parameters
-    XMFLOAT4 vLightDirs[2] =
+    XMFLOAT4 vLightDirs[3] =
     {
-        XMFLOAT4( -0.577f, 0.577f, -0.577f, 1.0f ),
         XMFLOAT4( 0.0f, 0.0f, -1.0f, 1.0f ),
+        XMFLOAT4( 0.0f, 0.0f, -1.0f, 1.0f ),
+        XMFLOAT4( -1.0f, 0.0f, 0.0f, 1.0f ),
     };
-    XMFLOAT4 vLightColors[2] =
+    XMFLOAT4 vLightColors[3] =
     {
-        XMFLOAT4( 0.0f, 1.0f, 1.0f, 0.5f ),
-        XMFLOAT4( 1.0f, 0.0f, 0.0f, 1.0f )
+        XMFLOAT4( 0.0f, 1.0f, 0.0f, 1.0f ),
+        XMFLOAT4( 1.0f, 0.0f, 0.0f, 1.0f ),
+        XMFLOAT4( 0.0f, 0.0f, 1.0f, 1.0f )
     };
 
     // Rotate the second light around the origin
-	XMMATRIX mRotate = XMMatrixRotationY( -2.0f * t );
-	XMVECTOR vLightDir = XMLoadFloat4( &vLightDirs[1] ); //current pos
+    XMMATRIX mRotate = XMMatrixRotationX(1.0f * t);
+    XMVECTOR vLightDir = XMLoadFloat4(&vLightDirs[0]); //current pos
+    vLightDir = XMVector3Transform(vLightDir, mRotate);
+    XMStoreFloat4(&vLightDirs[0], vLightDir);
+	mRotate = XMMatrixRotationY(-1.0f * t );
+	vLightDir = XMLoadFloat4( &vLightDirs[1] ); //current pos
 	vLightDir = XMVector3Transform( vLightDir, mRotate );
 	XMStoreFloat4( &vLightDirs[1], vLightDir );
+    mRotate = XMMatrixRotationZ(1.0f * t);
+    vLightDir = XMLoadFloat4(&vLightDirs[2]); //current pos
+    vLightDir = XMVector3Transform(vLightDir, mRotate);
+    XMStoreFloat4(&vLightDirs[2], vLightDir);
 
 	//
     // Clear the back buffer
@@ -581,8 +591,10 @@ void Render()
 	cb1.mProjection = XMMatrixTranspose( g_Projection );
 	cb1.vLightDir[0] = vLightDirs[0];
 	cb1.vLightDir[1] = vLightDirs[1];
+	cb1.vLightDir[2] = vLightDirs[2];
 	cb1.vLightColor[0] = vLightColors[0];
 	cb1.vLightColor[1] = vLightColors[1];
+	cb1.vLightColor[2] = vLightColors[2];
 	cb1.vOutputColor = XMFLOAT4(0, 0, 0, 0);
 	g_pImmediateContext->UpdateSubresource( g_pConstantBuffer, 0, NULL, &cb1, 0, 0 );
 
@@ -598,7 +610,7 @@ void Render()
     //
     // Render each light
     //
-    for( int m = 0; m < 2; m++ )
+    for( int m = 0; m < 3; m++ )
     {
 		XMMATRIX mLight = XMMatrixTranslationFromVector( 5.0f * XMLoadFloat4( &vLightDirs[m] ) );
 		XMMATRIX mLightScale = XMMatrixScaling( 0.2f, 0.2f, 0.2f );
