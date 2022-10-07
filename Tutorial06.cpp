@@ -13,6 +13,7 @@
 #include "resource.h"
 
 
+
 //--------------------------------------------------------------------------------------
 // Structures
 //--------------------------------------------------------------------------------------
@@ -68,6 +69,253 @@ HRESULT InitDevice();
 void CleanupDevice();
 LRESULT CALLBACK    WndProc( HWND, UINT, WPARAM, LPARAM );
 void Render();
+
+//rules of nature
+#include <iostream>
+XMMATRIX g_World2;
+ID3D11Buffer* g_pVertexBuffer2 = NULL;
+ID3D11Buffer* g_pIndexBuffer2 = NULL;
+ID3D11Buffer* g_pConstantBuffer2 = NULL;
+
+SimpleVertex vertices2[60];
+WORD indices2[60];
+
+HRESULT figure2();
+XMMATRIX g_World1;//delete this
+float Radius = 5.0f;
+float Side = 4 * Radius / sqrt(2 * (5 + sqrt(5)));
+float Height = Side * sqrt(3) / 2;
+float Length = Radius - Height / 2;
+float X = 0.0f;
+float Y = 0.0f;
+float Z = 0.0f;
+float Alpha = 0.0f;
+
+XMFLOAT3 getNormalized(XMFLOAT3 vector) {
+    float length = sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
+    return XMFLOAT3{ vector.x / length, vector.y / length, vector.z / length };
+}
+
+XMFLOAT4 getNormalized4(XMFLOAT4 vector) {
+    float length = sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
+    return XMFLOAT4{ vector.x / length, vector.y / length, vector.z / length, 1.0f };
+}
+
+XMFLOAT3 getNormal(const XMFLOAT3 dot1, const XMFLOAT3 dot2, const XMFLOAT3 dot3) {
+    float res_x, res_y, res_z;
+    res_x = (dot2.y - dot1.y) * (dot3.z - dot1.z) - ((dot2.z - dot1.z) * (dot3.y - dot1.y));
+    res_y = (dot2.x - dot1.x) * (dot3.z - dot1.z) - ((dot2.z - dot1.z) * (dot3.x - dot1.x));
+    res_z = (dot2.x - dot1.x) * (dot3.y - dot1.y) - ((dot2.y - dot1.y) * (dot3.x - dot1.x));
+    //return getNormalized(XMFLOAT3{ res_y, -res_x, res_z});
+    return getNormalized(XMFLOAT3{ res_y, -res_x, res_z});
+}
+XMFLOAT3 array[14];
+
+
+HRESULT figure2() {
+    //формирование точек
+
+    for (int i = 0, j = 0; i < 13; i++) {
+        if (i == 12) {
+            array[i] = {0.0f, 2 * Length + Height / 2, 0.0f};
+
+            array[i + 1] = {0.0f, 0.0f, 0.0f};
+            break;
+        }
+        else {
+            if (i % 2 == 0) {
+                Y = Length + Height / 2;
+                Alpha = 0.0f;
+            }
+            else {
+                Y = Length;
+                Alpha = -XM_2PI / 10;
+                ++j;
+            }
+
+            X = (Side / 2) * cos(XM_2PI / 5 * j + Alpha);
+            Z = (Side / 2) * sin(XM_2PI / 5 * j + Alpha);
+
+            array[i] = {X, Y, Z};
+        };
+    }
+
+    //формирование нормалей
+    //средние нормали
+    XMFLOAT3 normals[20];
+    for (int i = 0; i < 10; i++) {
+        if(i%2)
+        normals[i] = getNormal(array[i], array[i+1], array[i+2]);
+        else
+        normals[i] = getNormal(array[i], array[i+2], array[i+1]);
+    }
+    for (int i = 10, j = 0, k = 1; i < 20; i++) {
+        //верхние нормали
+        if (i < 15) {
+            normals[i] = getNormal(array[j+2], array[12], array[j]);
+            j += 2;
+        }
+        //нижние нормали
+        else {
+            normals[i] = getNormal(array[k], array[13], array[k+2]);
+            k += 2;
+
+        }
+    }
+
+    //формирование вершин
+    //формирование боковых вершин
+    for (int i = 0, j = 0, k = 0; i < 30; i += 3, j += 1, k++) {
+        vertices2[i] = { array[j], normals[k] };
+        vertices2[i + 1] = { array[j + 1], normals[k] };
+        vertices2[i + 2] = { array[j + 2], normals[k] };
+    } 
+
+    for (int i = 30, j = 0, c = 1, k = 10; i < 60; k++, i+=3) {
+        //верхние вершины
+        if (i < 45) {
+            vertices2[i] = { array[j], normals[k] };
+            vertices2[i + 1] = { array[12], normals[k] };
+            vertices2[i + 2] = { array[j + 2], normals[k] };
+            j += 2;
+        }
+        //нижние вершины
+        else {          
+            vertices2[i] = { array[c], normals[k] };
+            vertices2[i + 1] = { array[13], normals[k] };
+            vertices2[i + 2] = { array[c + 2], normals[k] };
+            c += 2;
+        }
+    }
+
+    //формирование индексов
+    //боковые индексы
+    for (int i = 0, j = 0; i < 30; i += 3, j++) {
+        if (j % 2 == 0) {
+            indices2[i] = i;
+            indices2[i + 1] = i + 2;
+            indices2[i + 2] = i + 1;
+        }
+        else {
+            indices2[i] = i;
+            indices2[i + 1] = i + 1;
+            indices2[i + 2] = i + 2;
+        }
+    }
+
+    for (int i = 30, j = 0; i < 60; i += 3, j++) {
+        //верхние индексы
+        if (j < 5) {
+            indices2[i] = i;
+            indices2[i + 1] = i + 1;
+            indices2[i + 2] = i + 2;
+        }
+        //нижние индексы
+        else {
+            indices2[i] = i;
+            indices2[i + 1] = i + 2;
+            indices2[i + 2] = i + 1;
+        }
+
+    }
+
+    HRESULT hr = S_OK;
+
+    D3D11_BUFFER_DESC bd2;
+    ZeroMemory(&bd2, sizeof(bd2));
+    bd2.Usage = D3D11_USAGE_DEFAULT;
+    bd2.ByteWidth = sizeof(SimpleVertex) * 60;
+    bd2.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    bd2.CPUAccessFlags = 0;
+    D3D11_SUBRESOURCE_DATA InitData2;
+    ZeroMemory(&InitData2, sizeof(InitData2));
+    InitData2.pSysMem = vertices2;
+    hr = g_pd3dDevice->CreateBuffer(&bd2, &InitData2, &g_pVertexBuffer2);
+    if (FAILED(hr))
+        return hr;
+    bd2.Usage = D3D11_USAGE_DEFAULT;
+    bd2.ByteWidth = sizeof(WORD) * 60;
+    bd2.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    bd2.CPUAccessFlags = 0;
+    InitData2.pSysMem = indices2;
+    hr = g_pd3dDevice->CreateBuffer(&bd2, &InitData2, &g_pIndexBuffer2);
+    if (FAILED(hr))
+        return hr;
+    // Create the constant buffer
+    bd2.Usage = D3D11_USAGE_DEFAULT;
+    bd2.ByteWidth = sizeof(ConstantBuffer);
+    bd2.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    bd2.CPUAccessFlags = 0;
+    hr = g_pd3dDevice->CreateBuffer(&bd2, NULL, &g_pConstantBuffer2);
+    if (FAILED(hr))
+        return hr;
+}
+
+
+//camera control
+float x = 0.0f, y = 0.0f, z = 0.0f, povorotX = 0.0f, povorotY = 0.0f, povorotZ = 0.0f;
+XMVECTOR Eye, Up, At;
+XMMATRIX RotationX, RotationY, RotationZ;
+void cameraView() {
+    RotationX = XMMatrixRotationX(povorotX);
+    RotationY = XMMatrixRotationY(povorotY);
+    RotationZ = XMMatrixRotationZ(povorotZ);
+    if (GetAsyncKeyState('S')) {
+        y -= 0.01f;
+    }
+    else if (GetAsyncKeyState('W')) {
+        y += 0.01f;
+    }
+    else if (GetAsyncKeyState('Q')) {
+        z -= 0.1f;
+    }
+    else if (GetAsyncKeyState('E')) {
+        z += 0.1f;
+    }
+    else if (GetAsyncKeyState('A')) {
+        x -= 0.1f;
+    }
+    else if (GetAsyncKeyState('D')) {
+        x += 0.1f;
+    }
+    else if (GetAsyncKeyState(VK_LBUTTON)) {
+        x = 0.0f;
+        y = 0.0f;
+        z = 0.0f;
+        povorotX = 0.0f;
+        povorotY = 0.0f;
+        povorotZ = 0.0f;
+
+    }
+    else if (GetAsyncKeyState('N')) {
+        povorotX += 0.001f;
+    }
+    else if (GetAsyncKeyState('M')) {
+        povorotX -= 0.001f;
+    }
+    else if (GetAsyncKeyState('L')) {
+        povorotY += 0.001f;
+    }
+    else if (GetAsyncKeyState('J')) {
+        povorotY -= 0.001f;
+    }
+    else if (GetAsyncKeyState('I')) {
+        povorotZ += 0.001f;
+    }
+    else if (GetAsyncKeyState('K')) {
+        povorotZ -= 0.001f;
+    }
+
+    Eye = XMVectorSet(x * 0.1f, 4.0f + y, -15.0f + z * 0.1f, 0.0f);
+    At = XMVectorSet(x * 0.1f, 1.0f + y, z * 0.1f, 0.0f);
+    Up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+    Eye = XMVector3TransformCoord(Eye, RotationX * RotationY * RotationZ);
+    At = XMVector3TransformCoord(At, RotationX * RotationY * RotationZ);
+    Up = XMVector3TransformCoord(Up, RotationX * RotationY * RotationZ);
+    g_View = XMMatrixLookAtLH(Eye, At, Up);
+
+}
+
 
 
 //--------------------------------------------------------------------------------------
@@ -288,6 +536,7 @@ HRESULT InitDevice()
     vp.TopLeftY = 0;
     g_pImmediateContext->RSSetViewports( 1, &vp );
 
+
 	// Compile the vertex shader
 	ID3DBlob* pVSBlob = NULL;
     hr = CompileShaderFromFile( L"Tutorial06.fx", "VS", "vs_4_0", &pVSBlob );
@@ -403,11 +652,6 @@ HRESULT InitDevice()
     if( FAILED( hr ) )
         return hr;
 
-    // Set vertex buffer
-    UINT stride = sizeof( SimpleVertex );
-    UINT offset = 0;
-    g_pImmediateContext->IASetVertexBuffers( 0, 1, &g_pVertexBuffer, &stride, &offset );
-
     // Create index buffer
     // Create vertex buffer
     WORD indices[] =
@@ -439,11 +683,8 @@ HRESULT InitDevice()
     if( FAILED( hr ) )
         return hr;
 
-    // Set index buffer
-    g_pImmediateContext->IASetIndexBuffer( g_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0 );
 
-    // Set primitive topology
-    g_pImmediateContext->IASetPrimitiveTopology( D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST );
+
 
 	// Create the constant buffer
 	bd.Usage = D3D11_USAGE_DEFAULT;
@@ -454,17 +695,24 @@ HRESULT InitDevice()
     if( FAILED( hr ) )
         return hr;
 
-    // Initialize the world matrices
-	g_World = XMMatrixIdentity();
+    //---------------------------------
+    //generate mesh
 
-    // Initialize the view matrix
-	XMVECTOR Eye = XMVectorSet( 0.0f, 4.0f, -15.0f, 0.0f );
-	XMVECTOR At = XMVectorSet( 0.0f, 1.0f, 0.0f, 0.0f );
-	XMVECTOR Up = XMVectorSet( 0.0f, 1.0f, 0.0f, 0.0f );
-	g_View = XMMatrixLookAtLH( Eye, At, Up );
+    figure2();
+
+    //----------------------------------------------------
+    // Initialize the world matrices
+    g_World = XMMatrixIdentity();
+    g_World2 = XMMatrixIdentity();
+    // Set primitive topology
+    g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+
 
     // Initialize the projection matrix
 	g_Projection = XMMatrixPerspectiveFovLH( XM_PIDIV4, width / (FLOAT)height, 0.01f, 100.0f );
+
+
 
     return S_OK;
 }
@@ -476,10 +724,14 @@ HRESULT InitDevice()
 void CleanupDevice()
 {
     if( g_pImmediateContext ) g_pImmediateContext->ClearState();
-
     if( g_pConstantBuffer ) g_pConstantBuffer->Release();
     if( g_pVertexBuffer ) g_pVertexBuffer->Release();
     if( g_pIndexBuffer ) g_pIndexBuffer->Release();
+    //
+    if (g_pConstantBuffer2) g_pConstantBuffer2->Release();
+    if (g_pVertexBuffer2) g_pVertexBuffer2->Release();
+    if (g_pIndexBuffer2) g_pIndexBuffer2->Release();
+    //
     if( g_pVertexLayout ) g_pVertexLayout->Release();
     if( g_pVertexShader ) g_pVertexShader->Release();
     if( g_pPixelShaderSolid ) g_pPixelShaderSolid->Release();
@@ -490,6 +742,8 @@ void CleanupDevice()
     if( g_pSwapChain ) g_pSwapChain->Release();
     if( g_pImmediateContext ) g_pImmediateContext->Release();
     if( g_pd3dDevice ) g_pd3dDevice->Release();
+
+   
 }
 
 
@@ -523,6 +777,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 //--------------------------------------------------------------------------------------
 // Render a frame
 //--------------------------------------------------------------------------------------
+
 void Render()
 {
     // Update our time
@@ -540,15 +795,19 @@ void Render()
         t = ( dwTimeCur - dwTimeStart ) / 1000.0f;
     }
 
+    // Initialize the view matrix
+    cameraView();
+
+
     // Rotate cube around the origin
-	g_World = XMMatrixRotationY( t );
+	//g_World = XMMatrixRotationY( t );
 
     // Setup our lighting parameters
     XMFLOAT4 vLightDirs[3] =
     {
-        XMFLOAT4( 0.0f, 0.0f, -1.0f, 1.0f ),
-        XMFLOAT4( 0.0f, 0.0f, -1.0f, 1.0f ),
-        XMFLOAT4( -1.0f, 0.0f, 0.0f, 1.0f ),
+        getNormalized4(XMFLOAT4{ 0.0f, .5f, 0.0f, 1.0f }),
+        getNormalized4(XMFLOAT4{ 0.0f, 0.0f, -1.0f, 1.0f }),
+        getNormalized4(XMFLOAT4{-1.0f, 0.0f, 0.0f, 1.0f }),
     };
     XMFLOAT4 vLightColors[3] =
     {
@@ -556,9 +815,9 @@ void Render()
         XMFLOAT4( 1.0f, 0.0f, 0.0f, 1.0f ),
         XMFLOAT4( 0.0f, 0.0f, 1.0f, 1.0f )
     };
-
+   
     // Rotate the second light around the origin
-    XMMATRIX mRotate = XMMatrixRotationX(1.0f * t);
+    XMMATRIX mRotate = XMMatrixRotationZ(1.0f * t);
     XMVECTOR vLightDir = XMLoadFloat4(&vLightDirs[0]); //current pos
     vLightDir = XMVector3Transform(vLightDir, mRotate);
     XMStoreFloat4(&vLightDirs[0], vLightDir);
@@ -574,7 +833,7 @@ void Render()
 	//
     // Clear the back buffer
     //
-    float ClearColor[4] = { 0.0f, 0.125f, 0.3f, 1.0f }; // red, green, blue, alpha
+    float ClearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f }; // red, green, blue, alpha
     g_pImmediateContext->ClearRenderTargetView( g_pRenderTargetView, ClearColor );
 
     //
@@ -586,9 +845,9 @@ void Render()
     // Update matrix variables and lighting variables
     //
     ConstantBuffer cb1;
-	cb1.mWorld = XMMatrixTranspose( g_World );
-	cb1.mView = XMMatrixTranspose( g_View );
-	cb1.mProjection = XMMatrixTranspose( g_Projection );
+    cb1.mWorld = XMMatrixTranspose(g_World2);
+    cb1.mView = XMMatrixTranspose(g_View);
+    cb1.mProjection = XMMatrixTranspose(g_Projection);
 	cb1.vLightDir[0] = vLightDirs[0];
 	cb1.vLightDir[1] = vLightDirs[1];
 	cb1.vLightDir[2] = vLightDirs[2];
@@ -596,16 +855,34 @@ void Render()
 	cb1.vLightColor[1] = vLightColors[1];
 	cb1.vLightColor[2] = vLightColors[2];
 	cb1.vOutputColor = XMFLOAT4(0, 0, 0, 0);
-	g_pImmediateContext->UpdateSubresource( g_pConstantBuffer, 0, NULL, &cb1, 0, 0 );
+	
 
     //
-    // Render the cube
+    // Render the figure
     //
+    g_pImmediateContext->UpdateSubresource(g_pConstantBuffer2, 0, NULL, &cb1, 0, 0);
+    UINT stride = sizeof(SimpleVertex);
+    UINT offset = 0;
+
+    g_pImmediateContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer2, &stride, &offset);
+    g_pImmediateContext->IASetIndexBuffer(g_pIndexBuffer2, DXGI_FORMAT_R16_UINT, 0);
+
+
 	g_pImmediateContext->VSSetShader( g_pVertexShader, NULL, 0 );
-	g_pImmediateContext->VSSetConstantBuffers( 0, 1, &g_pConstantBuffer );
+	g_pImmediateContext->VSSetConstantBuffers( 0, 1, &g_pConstantBuffer2);
 	g_pImmediateContext->PSSetShader( g_pPixelShader, NULL, 0 );
-	g_pImmediateContext->PSSetConstantBuffers( 0, 1, &g_pConstantBuffer );
-	g_pImmediateContext->DrawIndexed( 36, 0, 0 );
+	g_pImmediateContext->PSSetConstantBuffers( 0, 1, &g_pConstantBuffer2);
+
+    g_World2 = XMMatrixScaling(1.0f, 1.0f, 1.0f) * XMMatrixRotationY(0.0f) *
+        XMMatrixTranslation(0.0f, -3.0f, 0.0f);
+    g_pImmediateContext->DrawIndexed(60, 0, 0);
+
+
+    //back
+    g_pImmediateContext->IASetVertexBuffers(0, 1, &g_pVertexBuffer, &stride, &offset);
+    g_pImmediateContext->IASetIndexBuffer(g_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+    g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pImmediateContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
 
     //
     // Render each light
@@ -625,10 +902,10 @@ void Render()
 		g_pImmediateContext->DrawIndexed( 36, 0, 0 );
     }
 
+    
+
     //
     // Present our back buffer to our front buffer
     //
     g_pSwapChain->Present( 0, 0 );
 }
-
-

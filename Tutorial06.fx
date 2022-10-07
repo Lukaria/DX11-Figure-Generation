@@ -56,7 +56,7 @@ float4 PS( PS_INPUT input) : SV_Target
     float4 finalColor = 0;
     
     //do NdotL lighting for 2 lights
-    for(int i=0; i<3; i++)
+    for(int i=0; i<1; i++)
     {
         finalColor += saturate( dot( (float3)vLightDir[i],input.Norm) * vLightColor[i] );
     }
@@ -72,3 +72,4 @@ float4 PSSolid( PS_INPUT input) : SV_Target
 {
     return vOutputColor;
 }
+
