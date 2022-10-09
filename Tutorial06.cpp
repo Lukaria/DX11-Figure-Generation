@@ -70,18 +70,15 @@ void CleanupDevice();
 LRESULT CALLBACK    WndProc( HWND, UINT, WPARAM, LPARAM );
 void Render();
 
-//rules of nature
+//used declaraions for figure generation
 #include <iostream>
 XMMATRIX g_World2;
 ID3D11Buffer* g_pVertexBuffer2 = NULL;
 ID3D11Buffer* g_pIndexBuffer2 = NULL;
 ID3D11Buffer* g_pConstantBuffer2 = NULL;
 
-SimpleVertex vertices2[60];
-WORD indices2[60];
-
 HRESULT figure2();
-XMMATRIX g_World1;//delete this
+int figure_inds = 0;
 float Radius = 5.0f;
 float Side = 4 * Radius / sqrt(2 * (5 + sqrt(5)));
 float Height = Side * sqrt(3) / 2;
@@ -90,6 +87,7 @@ float X = 0.0f;
 float Y = 0.0f;
 float Z = 0.0f;
 float Alpha = 0.0f;
+//
 
 XMFLOAT3 getNormalized(XMFLOAT3 vector) {
     float length = sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
@@ -103,128 +101,131 @@ XMFLOAT4 getNormalized4(XMFLOAT4 vector) {
 
 XMFLOAT3 getNormal(const XMFLOAT3 dot1, const XMFLOAT3 dot2, const XMFLOAT3 dot3) {
     float res_x, res_y, res_z;
-    res_x = (dot2.y - dot1.y) * (dot3.z - dot1.z) - ((dot2.z - dot1.z) * (dot3.y - dot1.y));
-    res_y = (dot2.x - dot1.x) * (dot3.z - dot1.z) - ((dot2.z - dot1.z) * (dot3.x - dot1.x));
-    res_z = (dot2.x - dot1.x) * (dot3.y - dot1.y) - ((dot2.y - dot1.y) * (dot3.x - dot1.x));
-    //return getNormalized(XMFLOAT3{ res_y, -res_x, res_z});
-    return getNormalized(XMFLOAT3{ res_y, -res_x, res_z});
+    res_x = (dot2.y - dot1.y) * (dot3.z - dot1.z) - ((dot2.z - dot1.z) * (dot3.y - dot1.y)); //calculate normal coefs
+    res_y = (dot2.x - dot1.x) * (dot3.z - dot1.z) - ((dot2.z - dot1.z) * (dot3.x - dot1.x)); //using plane matrix
+    res_z = (dot2.x - dot1.x) * (dot3.y - dot1.y) - ((dot2.y - dot1.y) * (dot3.x - dot1.x)); //based on 3 points
+    return getNormalized(XMFLOAT3{ res_x, -res_y, res_z }); //normal normalization
+    //-res_y due to coef j should be with opposite sign (-j*res_y)
 }
-XMFLOAT3 array[14];
+
 
 
 HRESULT figure2() {
-    //формирование точек
+    const int points = 10; //number of middle points
 
-    for (int i = 0, j = 0; i < 13; i++) {
-        if (i == 12) {
-            array[i] = {0.0f, 2 * Length + Height / 2, 0.0f};
-
-            array[i + 1] = {0.0f, 0.0f, 0.0f};
-            break;
+    //calculation of points that will be used
+    const int arraysize = points + 4; //2 additional points for top and bottom, 2 additional points to 
+    //loop the cycle. They have same coords as point0 and point1
+    XMFLOAT3 array[arraysize];
+    for (int i = 0, j = 0; i < arraysize; i++) {
+        if (i % 2 == 0) { //height calculation 
+            Y = Length + Height / 2;
+            Alpha = 0.0f;
         }
         else {
-            if (i % 2 == 0) {
-                Y = Length + Height / 2;
-                Alpha = 0.0f;
-            }
-            else {
-                Y = Length;
-                Alpha = -XM_2PI / 10;
-                ++j;
-            }
-
-            X = (Side / 2) * cos(XM_2PI / 5 * j + Alpha);
-            Z = (Side / 2) * sin(XM_2PI / 5 * j + Alpha);
-
-            array[i] = {X, Y, Z};
-        };
-    }
-
-    //формирование нормалей
-    //средние нормали
-    XMFLOAT3 normals[20];
-    for (int i = 0; i < 10; i++) {
-        if(i%2)
-        normals[i] = getNormal(array[i], array[i+1], array[i+2]);
-        else
-        normals[i] = getNormal(array[i], array[i+2], array[i+1]);
-    }
-    for (int i = 10, j = 0, k = 1; i < 20; i++) {
-        //верхние нормали
-        if (i < 15) {
-            normals[i] = getNormal(array[j+2], array[12], array[j]);
-            j += 2;
+            Y = Length;
+            Alpha = -XM_2PI / points;
+            ++j;
         }
-        //нижние нормали
-        else {
-            normals[i] = getNormal(array[k], array[13], array[k+2]);
-            k += 2;
 
+        X = (Side / 2) * cos(2 * XM_2PI / points * j + Alpha);//cos is for x coord
+        Z = (Side / 2) * sin(2 * XM_2PI / points * j + Alpha);//sin is for y coord in Cartesian coordinates
+
+        array[i] = { X, Y, Z };
+    }
+    array[arraysize - 2] = { 0.0f, 2 * Length + Height / 2, 0.0f }; //top point
+    array[arraysize - 1] = { 0.0f, 0.0f, 0.0f }; //bottom point. cant be calculated in loop
+
+
+    //normals calculation
+    const int normsize = 2 * points;
+    XMFLOAT3 normals[normsize];
+    //middle normals. 1/2 of all
+    //plane calculation should be...
+    for (int i = 0; i < normsize/2; i++) {
+        if (i % 2 == 0) {           //...with counterclockwise points 
+            normals[i] = getNormal(array[i], array[i + 2], array[i + 1]);
         }
+        else {                      //...with clockwise points 
+            normals[i] = getNormal(array[i], array[i + 1], array[i + 2]);
+        }
+        
+    }
+    //upper normals. 1/4 of all
+                                //...with clockwise points
+    for (int i = normsize/2, j = 0; i < 3 * normsize / 4; i++, j += 2) {
+        normals[i] = getNormal(array[j], array[arraysize - 2], array[j + 2]);
+    }
+    //lower normals. 1/4 of all
+                                //...with counterclockwise points
+    for (int i = 3 * normsize / 4, j = 1; i < normsize; i++, j += 2) {
+        normals[i] = getNormal(array[j+2], array[arraysize - 1], array[j]);
     }
 
-    //формирование вершин
-    //формирование боковых вершин
-    for (int i = 0, j = 0, k = 0; i < 30; i += 3, j += 1, k++) {
+
+    //building an array of used vertices
+    const int vertsize = 6 * points; //every vertex is used 5 times (6 * points = 5 * (your num of middle points + 2 for top and bot)
+    //additional point0 and point1 used 5 times in total with original point0 and point1
+    SimpleVertex vertices2[vertsize];
+    //fomration of middle vertices. Every 3 vertices have the same normals cause they form a single polygon 
+    for (int i = 0, j = 0, k = 0; i < vertsize/2; i += 3, j += 1, k++) {
         vertices2[i] = { array[j], normals[k] };
         vertices2[i + 1] = { array[j + 1], normals[k] };
         vertices2[i + 2] = { array[j + 2], normals[k] };
     } 
-
-    for (int i = 30, j = 0, c = 1, k = 10; i < 60; k++, i+=3) {
-        //верхние вершины
-        if (i < 45) {
-            vertices2[i] = { array[j], normals[k] };
-            vertices2[i + 1] = { array[12], normals[k] };
-            vertices2[i + 2] = { array[j + 2], normals[k] };
-            j += 2;
-        }
-        //нижние вершины
-        else {          
-            vertices2[i] = { array[c], normals[k] };
-            vertices2[i + 1] = { array[13], normals[k] };
-            vertices2[i + 2] = { array[c + 2], normals[k] };
-            c += 2;
-        }
+    //upper vertices
+    for (int j = 0, k = normsize/2, i = vertsize / 2; i < 3 * vertsize / 4; i+=3, j+=2, k++) {
+        vertices2[i] = { array[j], normals[k] }; //same rule of 3 vertices
+        vertices2[i + 1] = { array[arraysize - 2], normals[k] }; //top point
+        vertices2[i + 2] = { array[j + 2], normals[k] };
     }
+    //lower vertices
+    for (int i = 3 * vertsize / 4, j = 1, k = 3 * normsize / 4; i < vertsize; i += 3, j += 2, k++) {
+        vertices2[i] = { array[j], normals[k] };//same rule of 3 vertices
+        vertices2[i + 1] = { array[arraysize - 1], normals[k] }; //bottom point
+        vertices2[i + 2] = { array[j + 2], normals[k] };
+    }
+    
 
-    //формирование индексов
-    //боковые индексы
-    for (int i = 0, j = 0; i < 30; i += 3, j++) {
-        if (j % 2 == 0) {
+    //indices formation
+    const int indsize = points * 6; //same as number of vertices
+    WORD indices2[indsize];
+    //middle indices. 1/2 of all
+    for (int i = 0, j = 0; i < indsize/2; i += 3, j++) {
+        if (j % 2 == 0) { //clockwise
             indices2[i] = i;
             indices2[i + 1] = i + 2;
             indices2[i + 2] = i + 1;
         }
-        else {
+        else { //also should be clockwise to render correctly
             indices2[i] = i;
             indices2[i + 1] = i + 1;
             indices2[i + 2] = i + 2;
         }
     }
-
-    for (int i = 30, j = 0; i < 60; i += 3, j++) {
-        //верхние индексы
-        if (j < 5) {
-            indices2[i] = i;
-            indices2[i + 1] = i + 1;
-            indices2[i + 2] = i + 2;
-        }
-        //нижние индексы
-        else {
-            indices2[i] = i;
-            indices2[i + 1] = i + 2;
-            indices2[i + 2] = i + 1;
-        }
-
+    //upper indices. 1/4 of all
+    for (int i = indsize/2, j = 0; j < points/2; i += 3, j++) {
+        indices2[i] = i;
+        indices2[i + 1] = i + 1;
+        indices2[i + 2] = i + 2;
     }
+    //lower indices. 1/4 of all
+    for (int i = 3 * indsize / 4, j = points / 2; j < points; i += 3, j++) {
+        indices2[i] = i;
+        indices2[i + 1] = i + 2;
+        indices2[i + 2] = i + 1;
+    }
+
+    
+
+    figure_inds = indsize;//global variable, used in DrawIndexed (Render func)
 
     HRESULT hr = S_OK;
-
+    //some buffers. Same as in guide
     D3D11_BUFFER_DESC bd2;
     ZeroMemory(&bd2, sizeof(bd2));
     bd2.Usage = D3D11_USAGE_DEFAULT;
-    bd2.ByteWidth = sizeof(SimpleVertex) * 60;
+    bd2.ByteWidth = sizeof(SimpleVertex) * vertsize;
     bd2.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     bd2.CPUAccessFlags = 0;
     D3D11_SUBRESOURCE_DATA InitData2;
@@ -234,7 +235,7 @@ HRESULT figure2() {
     if (FAILED(hr))
         return hr;
     bd2.Usage = D3D11_USAGE_DEFAULT;
-    bd2.ByteWidth = sizeof(WORD) * 60;
+    bd2.ByteWidth = sizeof(WORD) * indsize;
     bd2.BindFlags = D3D11_BIND_INDEX_BUFFER;
     bd2.CPUAccessFlags = 0;
     InitData2.pSysMem = indices2;
@@ -805,19 +806,19 @@ void Render()
     // Setup our lighting parameters
     XMFLOAT4 vLightDirs[3] =
     {
-        getNormalized4(XMFLOAT4{ 0.0f, .5f, 0.0f, 1.0f }),
+        getNormalized4(XMFLOAT4{ 0.0f, 1.0f, 0.0f, 1.0f }),
         getNormalized4(XMFLOAT4{ 0.0f, 0.0f, -1.0f, 1.0f }),
         getNormalized4(XMFLOAT4{-1.0f, 0.0f, 0.0f, 1.0f }),
     };
     XMFLOAT4 vLightColors[3] =
     {
-        XMFLOAT4( 0.0f, 1.0f, 0.0f, 1.0f ),
         XMFLOAT4( 1.0f, 0.0f, 0.0f, 1.0f ),
+        XMFLOAT4( 0.0f, 1.0f, 0.0f, 1.0f ),
         XMFLOAT4( 0.0f, 0.0f, 1.0f, 1.0f )
     };
    
     // Rotate the second light around the origin
-    XMMATRIX mRotate = XMMatrixRotationZ(1.0f * t);
+    XMMATRIX mRotate = XMMatrixRotationX(1.0f * t);
     XMVECTOR vLightDir = XMLoadFloat4(&vLightDirs[0]); //current pos
     vLightDir = XMVector3Transform(vLightDir, mRotate);
     XMStoreFloat4(&vLightDirs[0], vLightDir);
@@ -873,9 +874,10 @@ void Render()
 	g_pImmediateContext->PSSetShader( g_pPixelShader, NULL, 0 );
 	g_pImmediateContext->PSSetConstantBuffers( 0, 1, &g_pConstantBuffer2);
 
+
     g_World2 = XMMatrixScaling(1.0f, 1.0f, 1.0f) * XMMatrixRotationY(0.0f) *
         XMMatrixTranslation(0.0f, -3.0f, 0.0f);
-    g_pImmediateContext->DrawIndexed(60, 0, 0);
+    g_pImmediateContext->DrawIndexed(figure_inds, 0, 0);
 
 
     //back
@@ -899,7 +901,7 @@ void Render()
 		g_pImmediateContext->UpdateSubresource( g_pConstantBuffer, 0, NULL, &cb1, 0, 0 );
 
 		g_pImmediateContext->PSSetShader( g_pPixelShaderSolid, NULL, 0 );
-		g_pImmediateContext->DrawIndexed( 36, 0, 0 );
+		g_pImmediateContext->DrawIndexed(36, 0, 0 );
     }
 
     
