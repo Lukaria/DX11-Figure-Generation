@@ -45,7 +45,7 @@ for (int i = 0, j = 0; i < arraysize; i++) {
         array[i] = { X, Y, Z };
     }
 ```
-*Length* variable equals to height of pyramid (painted in blue on a very first image);
+*Length* variable equals to height of pyramid (painted in blue on a 3rd first image);
 
 *Height* - equals to height between two pyramids;
 
